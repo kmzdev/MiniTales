@@ -1,30 +1,27 @@
 """
-Geração de texto a partir do MiniTales treinado.
-Decodifica IDs → palavras usando meta.pkl.
+MiniTales — geração de texto.
 """
 
 import os
 import pickle
+import re
 from contextlib import nullcontext
 
 import torch
 
 from model import GPTConfig, GPT
 
-# -----------------------------------------------------------------------------
-out_dir = 'out-tinystories'
-start = "once upon a time"          # prompt inicial
+out_dir = 'out-tinystories-v2'
+start = "once upon a time"
 num_samples = 5
 max_new_tokens = 200
 temperature = 0.8
 top_k = 50
 seed = 1337
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-dtype = ('bfloat16' if (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
-         else ('float16' if torch.cuda.is_available() else 'float32'))
+dtype = 'float16' if torch.cuda.is_available() else 'float32'
 compile = False
 dataset = 'tinystories'
-# -----------------------------------------------------------------------------
 
 config_keys = [k for k, v in globals().items()
                if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
@@ -37,21 +34,22 @@ device_type = 'cuda' if 'cuda' in device else 'cpu'
 ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-# carrega meta
 meta_path = os.path.join('data', dataset, 'meta.pkl')
 with open(meta_path, 'rb') as f:
     meta = pickle.load(f)
 stoi, itos = meta['stoi'], meta['itos']
 
+
 def encode(s):
-    import re
-    words = re.findall(r"\b\w+\b|[.,!?;:'\"-]", s.lower())
+    s = s.lower()
+    words = re.findall(r"[a-z0-9]+|[.,!?;:'\"-]", s)
     return [stoi.get(w, 1) for w in words]
+
 
 def decode(ids):
     return ' '.join(itos[i] for i in ids)
 
-# carrega modelo
+
 ckpt_path = os.path.join(out_dir, 'ckpt.pt')
 ckpt = torch.load(ckpt_path, map_location=device)
 model = GPT(GPTConfig(**ckpt['model_args']))
