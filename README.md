@@ -1,30 +1,15 @@
-# MiniTales — TinyStories com vocabulário otimizado
+# MiniTales-LM
 
-Um fork do [nanoGPT](https://github.com/karpathy/nanoGPT) adaptado para treinar
-um GPT-2 clássico de **5.25M parâmetros** no dataset **TinyStories**, usando um
-vocabulário de **8.192 palavras** construído no próprio corpus.
-
-**Licença:** MIT
+Um GPT-2 clássico de **5.25M parâmetros** treinado do zero no dataset
+**TinyStories**, usando um vocabulário de **8.192 palavras** construído no
+próprio corpus.
 
 O resultado é um modelo que **gera histórias coerentes em inglês**, ocupa
-**21 MB em disco** (pesos fp32) e foi treinado em **~4h numa GPU T4 gratuita**.
----
+**~21 MB em disco** (pesos fp32) e foi treinado em **~4h numa GPU T4 gratuita**.
 
-## Sumário
+**Licença:** MIT (mesma do nanoGPT).
 
-1. [O que é](#o-que-é)
-2. [Como funciona](#como-funciona)
-3. [Resultados](#resultados)
-4. [Comparação com o paper](#comparação-com-o-paper)
-5. [Como rodar](#como-rodar)
-6. [Estrutura do repo](#estrutura-do-repo)
-7. [Formatos de checkpoint](#formatos-de-checkpoint)
-8. [Limitações](#limitações)
-9. [O que vem depois](#o-que-vem-depois)
-10. [Exemplos de geração](#exemplos-de-geração)
-11. [Ferramentas utilizadas](#ferramentas-utilizadas)
-12. [Referências](#referências)
-13. [Licença](#licença)
+**Pesos:** `minitales-lm-5.25m.pt` — disponível na página de [Releases](../../releases).
 
 ---
 
@@ -37,7 +22,7 @@ treinado do zero no dataset
 
 A diferença em relação ao nanoGPT original está na **tokenização**:
 
-| | nanoGPT (padrão) | MiniTales |
+| | nanoGPT (padrão) | MiniTales-LM |
 |---|---|---|
 | Tokenizador | BPE (GPT-2) | Palavras inteiras + pontuação |
 | Vocab | 50.257 | **8.192** |
@@ -48,8 +33,8 @@ Com um vocabulário **6x menor**, o embedding deixa de dominar o orçamento de
 parâmetros, liberando espaço para os blocos Transformer.
 
 **Em termos simples:** em vez de gastar 60% dos parâmetros em embeddings
-(como aconteceria com BPE de 50K), o MiniTales gasta 40% — e os outros 60% vão
-para os blocos que aprendem a narrativa.
+(como aconteceria com BPE de 50K), o MiniTales-LM gasta 40% — e os outros 60%
+vão para os blocos que aprendem a narrativa.
 
 ---
 
@@ -65,7 +50,7 @@ prepare.py (normalização Unicode + tokenização por palavra)
 train.bin / val.bin (uint16)
        │
        ▼
-MiniTales (5.25M params)
+MiniTales-LM (5.25M params)
   ├─ 4 camadas Transformer
   ├─ 4 heads
   ├─ d_model = 256
@@ -81,7 +66,7 @@ sample.py → texto
 
 ---
 
-## Resultados
+## Resultados (v1.0)
 
 | Métrica | Valor |
 |---|---|
@@ -122,7 +107,7 @@ Todos usam **8 camadas**, **contexto 512** e o tokenizador **GPT-Neo** (~50K).
 |---|---|---|---|---|---|---|
 | TinyStories-1M (paper) | 1M | 8 | 512 | ~50K | ~2.5 | 48.6 MB |
 | TinyStories-3M (paper) | 3.65M | 8 | 512 | ~50K | ~2.1 | 66.7 MB |
-| **MiniTales (este repo)** | **5.25M** | **4** | **256** | **8192** | **1.835** | **~21 MB** |
+| **MiniTales-LM** | **5.25M** | **4** | **256** | **8192** | **1.835** | **~21 MB** |
 | TinyStories-8M (paper) | 8M | 8 | 512 | ~50K | ~1.9 | 116 MB |
 
 **Atenção:** a loss **não é diretamente comparável** entre modelos com
@@ -131,19 +116,13 @@ possível é `ln(8192) ≈ 9.01`. Com 50.257 classes (vocab GPT-Neo), é
 `ln(50257) ≈ 10.82`. **A diferença esperada é de ~1.8 na loss**, o que
 favorece artificialmente modelos com vocabulário menor.
 
-Portanto, **a loss de 1.835 do MiniTales não significa que ele é melhor que os
-modelos do paper**. Significa apenas que ele está resolvendo uma tarefa
+Portanto, **a loss de 1.835 do MiniTales-LM não significa que ele é melhor
+que os modelos do paper**. Significa apenas que ele está resolvendo uma tarefa
 diferente (prever entre 8.192 classes em vez de 50.257).
 
-### Tamanho dos arquivos
-
-O `pytorch_model.bin` dos modelos oficiais **inclui overhead do HuggingFace**
-(configs, buffers, metadados). Os pesos puros são significativamente menores.
-O MiniTales é armazenado em formato PyTorch puro, sem overhead.
-
-**O MiniTales ocupa ~3x menos espaço em disco que o TinyStories-3M**, apesar de
-ter mais parâmetros. Isso deve-se exclusivamente ao vocabulário menor
-(8192 vs. ~50K).
+**O que o MiniTales-LM demonstra:** um vocabulário otimizado permite treinar um
+modelo de ~5M de parâmetros que gera histórias coerentes, ocupando **~3x menos
+espaço em disco** que os modelos oficiais de tamanho similar.
 
 ---
 
@@ -170,9 +149,9 @@ palavra, e gera `train.bin`, `val.bin` e `meta.pkl`.
 
 | Arquivo | Tamanho |
 |---|---|
-| `train.bin` | 900.07 MB |
-| `val.bin` | 9.05 MB |
-| `meta.pkl` | 140.04 KB |
+| `train.bin` | ~900 MB |
+| `val.bin` | ~9 MB |
+| `meta.pkl` | ~140 KB |
 
 ### 3. Treinar
 
@@ -197,12 +176,15 @@ python sample.py --out_dir=out-tinystories --start="once upon a time"
 ├── model.py                    # GPT-2 clássico
 ├── train.py                    # Loop de treino CPU/GPU autodetect
 ├── sample.py                   # Geração
+├── eval_prompts.py             # Avaliação com 50 prompts
 ├── configurator.py             # Override de config via CLI
 ├── config/
-│   └── train_tinystories.py    # Hiperparâmetros
+│   └── train_tinystories.py    # Hiperparâmetros v1.0
 ├── data/
 │   └── tinystories/
 │       └── prepare.py          # HF → train.bin / val.bin
+├── LICENSE
+├── .gitignore
 └── README.md
 ```
 
@@ -217,28 +199,20 @@ versões menores:
 | Formato | Tamanho | Uso |
 |---|---|---|
 | `ckpt.pt` | 60.8 MB | Retomar treino |
-| `model.pt` (fp32) | ~21 MB | Inferência |
+| `minitales-lm-5.25m.pt` | ~21 MB | Inferência (release) |
 | `model_fp16.pt` | ~10.5 MB | Inferência otimizada |
 | `model_int8.pt` | ~5 MB | Edge/mobile |
 
-**Como extrair o `model.pt`:**
+**Como carregar o release:**
 
 ```python
 import torch
 from model import GPTConfig, GPT
 
-ckpt = torch.load('out-tinystories/ckpt.pt', map_location='cpu')
+ckpt = torch.load('minitales-lm-5.25m.pt', map_location='cpu')
 model = GPT(GPTConfig(**ckpt['model_args']))
-sd = ckpt['model']
-for k in list(sd.keys()):
-    if k.startswith('_orig_mod.'):
-        sd[k[len('_orig_mod.'):]] = sd.pop(k)
-model.load_state_dict(sd)
-
-torch.save({
-    'model': model.state_dict(),
-    'model_args': ckpt['model_args'],
-}, 'out-tinystories/model.pt')
+model.load_state_dict(ckpt['model'])
+model.eval()
 ```
 
 ---
@@ -287,7 +261,7 @@ aprende exatamente isso.
 
 ### 4. Diversidade limitada
 
-Comparado aos modelos do paper, o MiniTales tem **diversidade menor**. Isso
+Comparado aos modelos do paper, o MiniTales-LM tem **diversidade menor**. Isso
 deve-se a três fatores:
 
 - **Vocabulário reduzido** (8192 vs. ~50K) — menos palavras disponíveis
@@ -298,14 +272,14 @@ deve-se a três fatores:
 
 **Métricas qualitativas estimadas** (comparadas ao paper):
 
-| Aspecto | MiniTales | Paper (modelos oficiais) |
+| Aspecto | MiniTales-LM | Paper (modelos oficiais) |
 |---|---|---|
 | Gramática | ~8/10 | ~8/10 |
 | Criatividade | ~5/10 | ~7/10 |
 | Consistência | ~6/10 | ~8/10 |
 
-**O MiniTales está abaixo do paper em criatividade e consistência, mas próximo
-em gramática.**
+**O MiniTales-LM está abaixo do paper em criatividade e consistência, mas
+próximo em gramática.**
 
 ### 5. Deriva de tópico
 
@@ -351,8 +325,8 @@ O paper usa **GPT-4 como professor** para avaliar grammar, creativity e
 consistency. Este repositório usa **loss de validação** como métrica única.
 
 A loss **não captura** criatividade nem consistência tão bem quanto o GPT-4
-Eval. Portanto, **não é possível afirmar que o MiniTales é "melhor" ou "pior"
-que os modelos do paper** com base apenas na loss.
+Eval. Portanto, **não é possível afirmar que o MiniTales-LM é "melhor" ou
+"pior" que os modelos do paper** com base apenas na loss.
 
 ### 10. Sem TinyStories-Instruct
 
@@ -361,7 +335,7 @@ inclui instruções explícitas (summaries, features, words, sentences). Modelos
 treinados nessa variante são capazes de **seguir instruções** e **gerar
 histórias com características específicas**.
 
-O MiniTales **não foi treinado nessa variante**. Portanto, **não é capaz de
+O MiniTales-LM **não foi treinado nessa variante**. Portanto, **não é capaz de
 seguir instruções**. Ele só sabe gerar histórias no estilo padrão.
 
 ### 11. Arquitetura GPT-2 vs. GPT-Neo
@@ -375,7 +349,7 @@ Para modelos pequenos, a diferença é **mínima**, mas existe.
 
 ### 12. Sem avaliação humana
 
-O paper usa prompts manuais e avaliação com GPT-4. O MiniTales **não tem
+O paper usa prompts manuais e avaliação com GPT-4. O MiniTales-LM **não tem
 avaliação humana sistemática**. Os samples no README foram inspecionados
 manualmente, mas **não há uma avaliação formal**.
 
@@ -404,26 +378,31 @@ O modelo foi avaliado apenas em **loss** e **inspeção qualitativa**.
 
 ---
 
-## O que vem depois
+## Em desenvolvimento: v1.1
 
-**Melhorias possíveis (não implementadas):**
+Uma versão **1.1** está em preparação, com as seguintes mudanças em relação à
+v1.0:
 
-- **Mais camadas:** 6 ou 8 (`n_layer=6` ou `n_layer=8`) → melhor consistência
-- **Vocab maior:** 16K ou 32K → maior diversidade
-- **Correção Unicode:** eliminar `â œ` dos samples
-- **TinyStories-Instruct:** fine-tuning com instruções
-- **GPT-4 Eval:** avaliação multidimensional com GPT-4
-- **RoPE:** position embeddings rotacionais
-- **SwiGLU:** ativação moderna
+| Item | v1.0 | v1.1 |
+|---|---|---|
+| `n_layer` | 4 | **6** |
+| `batch_size` | 32 | **128** |
+| `dtype` | bf16 (emulado) | **fp16** |
+| `compile` | True | **False** |
+| `max_iters` | 50k | **100k** |
+| `warmup_iters` | 500 | **1000** |
+| Normalização Unicode | ❌ | **✅** |
+| memmap | recriado | **reutilizado** |
 
-**Outros projetos (não este):**
+**Objetivo:** reduzir o tempo de treino (~4h → ~1h estimado), eliminar o `â œ`
+dos samples, e melhorar a consistência (6 camadas vs. 4).
 
-- Treinar com código (novo pipeline)
-- Aplicar a outro corpus
+**Status:** arquivos modificados, mas **ainda não treinada nem testada**.
+Quando a v1.1 for validada, este README será atualizado com os números reais.
 
 ---
 
-## Exemplos de geração
+## Exemplos de geração (v1.0)
 
 **Prompt:** `"once upon a time"` | **temperature:** 0.8 | **top_k:** 50
 
@@ -476,7 +455,7 @@ a long stick . he thought it would be fun to throw it . [...]
 
 ## Ferramentas utilizadas
 
-- **DeepSeek-V4 Chat** — utilizado como assistente durante todo o
+- **DeepSeek (chat)** — utilizado como assistente durante todo o
   desenvolvimento: debate de arquitetura, análise de logs de treino, comparação
   com o paper, revisão de trade-offs, e escrita desta documentação.
 - **Kaggle (GPU T4)** — treino final.
