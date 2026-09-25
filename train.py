@@ -1,5 +1,5 @@
 """
-MiniTales — treino CPU+GPU autodetect. Config padrão ~1.85M parâmetros.
+MiniTales — treino CPU+GPU, fp16 nativo na T4.
 """
 
 import os
@@ -14,47 +14,45 @@ import torch
 from model import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
-# defaults
-out_dir = 'out-tinystories'
-eval_interval = 500
-log_interval = 10
+out_dir = 'out-tinystories-v2'
+eval_interval = 1000
+log_interval = 50
 eval_iters = 100
 eval_only = False
 always_save_checkpoint = True
 init_from = 'scratch'
 
 wandb_log = False
-wandb_project = 'tinystories'
-wandb_run_name = 'minitales'
+wandb_project = 'minitales'
+wandb_run_name = 'v1.1'
 
 dataset = 'tinystories'
 gradient_accumulation_steps = 1
-batch_size = 32
-block_size = 128
+batch_size = 128
+block_size = 256
 
-n_layer = 4
+n_layer = 6
 n_head = 4
-n_embd = 128
-dropout = 0.0
+n_embd = 256
+dropout = 0.1
 bias = False
 
-learning_rate = 1e-3
-max_iters = 20000
+learning_rate = 6e-4
+max_iters = 100000
 weight_decay = 1e-1
 beta1 = 0.9
-beta2 = 0.99
+beta2 = 0.95
 grad_clip = 1.0
 
 decay_lr = True
-warmup_iters = 200
-lr_decay_iters = 20000
-min_lr = 1e-4
+warmup_iters = 1000
+lr_decay_iters = 100000
+min_lr = 6e-5
 
-# system (autodetect)
+# system — força fp16 na GPU
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-dtype = ('bfloat16' if (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
-         else ('float16' if torch.cuda.is_available() else 'float32'))
-compile = True if torch.cuda.is_available() else False
+dtype = 'float16' if torch.cuda.is_available() else 'float32'
+compile = False
 # -----------------------------------------------------------------------------
 
 config_keys = [k for k, v in globals().items()
@@ -100,10 +98,14 @@ ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=
 
 data_dir = os.path.join('data', dataset)
 
+# -----------------------------------------------------------------------------
+# memmap carregado UMA vez (fora do get_batch)
+train_data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
+val_data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
+
 
 def get_batch(split):
-    fname = 'train.bin' if split == 'train' else 'val.bin'
-    data = np.memmap(os.path.join(data_dir, fname), dtype=np.uint16, mode='r')
+    data = train_data if split == 'train' else val_data
     ix = torch.randint(len(data) - block_size, (batch_size,))
     x = torch.stack([torch.from_numpy((data[i:i + block_size]).astype(np.int64)) for i in ix])
     y = torch.stack([torch.from_numpy((data[i + 1:i + 1 + block_size]).astype(np.int64)) for i in ix])
@@ -112,6 +114,7 @@ def get_batch(split):
     else:
         x, y = x.to(device), y.to(device)
     return x, y
+# -----------------------------------------------------------------------------
 
 
 iter_num = 0
@@ -162,8 +165,6 @@ ckpt = None
 if compile and device_type == 'cuda':
     print("compiling the model...")
     model = torch.compile(model)
-elif compile:
-    print("torch.compile desabilitado em CPU.")
 
 if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
