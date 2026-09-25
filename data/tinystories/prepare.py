@@ -1,6 +1,6 @@
 """
-Prepara TinyStories do Hugging Face → train.bin / val.bin (uint16).
-Versão otimizada para Colab: processa em chunks, com normalização Unicode.
+Prepara TinyStories → train.bin / val.bin (uint16).
+Normalização Unicode completa + sanitização ASCII.
 """
 
 import os
@@ -16,17 +16,20 @@ OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_NAME = "roneneldan/TinyStories"
 VOCAB_SIZE = 8192
 CHUNK = 100_000
-TOKEN_RE = re.compile(r"\b\w+\b|[.,!?;:'\"-]")
+
+TOKEN_RE = re.compile(r"[a-z0-9]+|[.,!?;:'\"-]")
 
 
 def normalize(text):
-    """Normaliza Unicode: aspas curvas → retas, acentos combinados → pré-compostos."""
     text = unicodedata.normalize('NFKC', text)
-    # troca aspas curvas por retas (redundante com NFKC, mas garante)
     text = text.replace('"', '"').replace('"', '"')
     text = text.replace(''', "'").replace(''', "'")
     text = text.replace('—', '-').replace('–', '-')
-    return text.lower()
+    text = text.replace('…', '...')
+    text = text.replace('\u00a0', ' ')
+    text = text.lower()
+    text = text.encode('ascii', 'ignore').decode('ascii')
+    return text
 
 
 def tokenize(text):
@@ -38,7 +41,6 @@ def main():
     ds = load_dataset(DATASET_NAME)
     print(ds)
 
-    # PASSO 1: contar
     print("\n[1/3] Contando palavras (train)...")
     counter = Counter()
     n = len(ds["train"])
@@ -54,7 +56,6 @@ def main():
     cobertura = sum(c for _, c in most_common) / total * 100
     print(f"vocab: {len(itos):,} | cobertura: {cobertura:.2f}%")
 
-    # PASSO 2: train
     print("\n[2/3] Convertendo train...")
     out_path = os.path.join(OUT_DIR, 'train.bin')
     total_ids = 0
@@ -69,7 +70,6 @@ def main():
             total_ids += len(arr)
     print(f"train: {total_ids:,} IDs")
 
-    # PASSO 3: val
     print("\n[3/3] Convertendo val...")
     n_val = len(ds["validation"])
     out_path = os.path.join(OUT_DIR, 'val.bin')
