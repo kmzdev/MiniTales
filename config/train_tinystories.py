@@ -1,4 +1,4 @@
-out_dir = 'out-tinystories-v2'
+out_dir = 'out-tinystories'
 init_from = 'scratch'
 eval_interval = 1000
 eval_iters = 100
